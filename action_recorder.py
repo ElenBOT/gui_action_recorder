@@ -105,6 +105,32 @@ def ensure_app_icon():
     except Exception:
         return None
 
+# Global reference to root for dialog parenting
+APP_ROOT = None
+
+def patch_tkinter_dialogs(root):
+    global APP_ROOT
+    APP_ROOT = root
+    
+    # Wrap simpledialog.askstring
+    orig_askstring = simpledialog.askstring
+    def custom_askstring(title, prompt, **kwargs):
+        if 'parent' not in kwargs and APP_ROOT:
+            kwargs['parent'] = APP_ROOT
+        return orig_askstring(title, prompt, **kwargs)
+    simpledialog.askstring = custom_askstring
+
+    # Wrap messagebox functions
+    for name in ('showinfo', 'showwarning', 'showerror', 'askyesno', 'askyesnocancel'):
+        orig_func = getattr(messagebox, name)
+        def make_custom(func=orig_func):
+            def custom_func(title, message, **kwargs):
+                if 'parent' not in kwargs and APP_ROOT:
+                    kwargs['parent'] = APP_ROOT
+                return func(title, message, **kwargs)
+            return custom_func
+        setattr(messagebox, name, make_custom())
+
 class MacroApp:
     """
     Action Recorder Main GUI Window.
@@ -112,6 +138,7 @@ class MacroApp:
     """
     def __init__(self, root):
         self.root = root
+        patch_tkinter_dialogs(self.root)
         self.root.title("GUI Action Recorder")
         # Calculate dynamic window geometry based on system DPI scaling
         base_width = 460
