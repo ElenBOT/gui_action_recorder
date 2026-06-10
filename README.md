@@ -1,6 +1,7 @@
 # GUI Action Recorder
 
-![App GUI Screenshot](image.png)
+<img width="1347" height="594" alt="image" src="https://github.com/user-attachments/assets/9f7e566f-749b-4ec1-9dfd-3260c46b90e4" />
+
 
 A lightweight and premium desktop macro automation suite. It allows you to record, manage, and execute mouse and keyboard actions with pixel-perfect precision.
 
