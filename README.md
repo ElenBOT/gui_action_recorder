@@ -10,16 +10,6 @@ This project supports two main execution modes:
 
 ---
 
-## Features
-
-- **Modern Card-Style UI**: A premium tkinter dashboard with distinct, high-contrast panel colors.
-- **Balanced 2x2 Grid Controls**: Fully aligned Orange Pi compilation, playback, device initialization, and SSH logs panel.
-- **Topmost Modal Dialogs**: Modals and input popups (such as directory creation and SSH password prompts) automatically inherit topmost focus so they never get hidden behind the main window.
-- **Global Hotkey Execution**: Press `[F8]` to start recording, stop recording, or immediately abort macro playback.
-- **Drag-and-Drop Management**: Organize recorded macro files into subfolders by dragging files across lists.
-
----
-
 ## Requirements
 
 The application requires Python 3.x and the following external modules:
