@@ -1,83 +1,63 @@
 # GUI Action Recorder
 
-A lightweight, premium, and clean Python desktop application to record, manage, and play back mouse and keyboard macros. Built with standard Tkinter using modern layout design systems, Segoe UI typography, and smart thread handling.
+![App GUI Screenshot](image.png)
 
-This project also includes a transpiler to compile recorded macro paths to relative binary `.hid` format for bare-metal hardware execution on an Orange Pi single-board computer, enabling OTG hardware mouse and keyboard simulation.
+A lightweight and premium desktop macro automation suite. It allows you to record, manage, and execute mouse and keyboard actions with pixel-perfect precision.
 
----
-
-## Key Features
-
-- **Modern Segmented Card UI**: Styled using custom ice blue, mint green, and light slate card layouts.
-- **Asynchronous Execution & Hotkey**: Integrated global keyboard listener using `[F8]` to asynchronously **Start Recording**, **Stop Recording**, or **Abort Playback** at any time.
-- **Shorthand List JSON Format**: Optimizes file size by ~90% by serializing raw event tracking into a compact array list structure.
-- **Dynamic File Explorer**: A two-column folder and file browser (Left: Folders, Right: Macros) displaying details at a glance. Supports `exportselection=False` to retain double selection highlights.
-- **File Metadata Details**: Displays live estimated file size in KB, actions count, and local modification timestamps (e.g. `2026/6/10 PM 04:24`) for saved or recorded events.
-- **Intelligent Drag-to-Move**: Drag macro files directly from the right-hand listbox and drop them onto target directories in the left listbox to organize files.
-- **Unified Deletion**: One combined delete button (`🗑`) dynamically deletes files or folders depending on active selections.
-- **Self-Contained Icon Generator**: Automatically generates and loads a retro camera pixel-art window icon (`app_icon.ppm`) on launch, requiring no external assets or packages.
-- **Orange Pi Hardware Emulation Integration**:
-  - `translator.py`: Compiles recorded JSON actions into relative coordinates and USB HID reports.
-  - `orangepi_client.py`: Bare-metal executor client for the `/dev/hidg0` (keyboard) and `/dev/hidg1` (mouse) Linux nodes.
+This project supports two main execution modes:
+1. **Local Playback**: Record keyboard and mouse inputs and replay them locally on your computer via software simulation.
+2. **Hardware Emulation (Anti-Cheat Bypass)**: Transpile recorded macros into raw USB HID binary packets and execute them using a single-board computer (like Orange Pi) configured as a physical USB OTG keyboard/mouse gadget. Because the host PC detects the Orange Pi as a real physical USB device, it successfully bypasses software-level anti-cheat and macro detection mechanisms.
 
 ---
 
-## Directory Structure
+## Features
 
-```text
-├── action_recorder.py    # Main GUI Window & event bindings
-├── macro_runner.py       # Asynchronous playback controller
-├── utils.py              # Serialization formats & time helpers
-├── translator.py         # JSON macro to binary .hid compiler
-├── orangepi_client.py    # Linux hardware emulator client
-├── .gitignore            # Version control exclusions
-└── recorded/             # User macro directories
-    └── main/             # Sample macro folders
+- **Modern Card-Style UI**: A premium tkinter dashboard with distinct, high-contrast panel colors.
+- **Balanced 2x2 Grid Controls**: Fully aligned Orange Pi compilation, playback, device initialization, and SSH logs panel.
+- **Topmost Modal Dialogs**: Modals and input popups (such as directory creation and SSH password prompts) automatically inherit topmost focus so they never get hidden behind the main window.
+- **Global Hotkey Execution**: Press `[F8]` to start recording, stop recording, or immediately abort macro playback.
+- **Drag-and-Drop Management**: Organize recorded macro files into subfolders by dragging files across lists.
+
+---
+
+## Requirements
+
+The application requires Python 3.x and the following external modules:
+- **`pynput`**: For recording mouse/keyboard events and local playback.
+- **`paramiko`**: For SSH/SFTP communication to the Orange Pi.
+
+---
+
+## Getting Started
+
+### Installation
+
+Clone the repository to your local machine:
+```bash
+git clone https://github.com/ElenBOT/gui_action_recorder.git
+cd gui_action_recorder
 ```
 
----
+Install the required dependencies:
+```bash
+pip install pynput paramiko
+```
 
-## Installation & Setup
+### Usage
 
-1. Clone the repository to your local workspace:
+1. **Launch the Application**:
    ```bash
-   git clone https://github.com/[your-username]/gui_action_recorder.git
-   cd gui_action_recorder
+   python action_recorder.py
    ```
 
-2. Make sure Python 3.x is installed. Install package dependencies:
-   ```bash
-   pip install pynput
-   ```
+2. **Record & Replay Locally**:
+   - Press `[F8]` (or click **Record**) to start recording. The window will go semi-transparent.
+   - Perform your actions, and press `[F8]` (or click **Stop**) when finished.
+   - Enter a filename, select a target folder in the explorer, and click `💾` to save.
+   - Select a macro and click **Play** (or press `[F8]`) to replay it.
 
----
-
-## Usage
-
-### 1. Launching the GUI
-Run the main script from your terminal:
-```bash
-python action_recorder.py
-```
-
-- **Record Actions**: Click `⏺ Record` or press `[F8]`. The window will automatically go semi-transparent. Press `[F8]` or click `⏹ Stop` to finish.
-- **Save Macro**: Enter a name in the `Save Name` field and select a folder on the left, then click the `💾` save icon.
-- **Replay Macro**: Select a folder and click a macro file, then click `▶ Play` or press `[F8]`. Press `[F8]` to abort playback instantly.
-- **Drag-to-Move**: Hold left-click on a file in the right column, drag it over to any folder in the left column, and release.
-- **Delete**: Select a file or folder and click the `🗑` button.
-
-### 2. Orange Pi OTG Translation
-To transpile a recorded JSON macro to the binary USB HID format:
-```bash
-python translator.py recorded/main/macro_name.json
-```
-This will compile and generate `recorded/main/macro_name.hid`. Copy this file alongside `orangepi_client.py` to your Orange Pi board, and execute:
-```bash
-sudo python orangepi_client.py recorded/main/macro_name.hid
-```
-
----
-
-## License
-
-Distributed under the MIT License. See `LICENSE` for more information.
+3. **Orange Pi Hardware Emulation**:
+   - Enter your Orange Pi login details (`user@host`) and password in the OPi Panel.
+   - Click **Init USB Gadget** to run your remote USB gadget initialization script (`setup_as_km.sh`).
+   - Click **Compile & Send** to compile your macro into absolute coordinate binary format and upload it.
+   - Click **Play on OPi** to trigger physical playback.
