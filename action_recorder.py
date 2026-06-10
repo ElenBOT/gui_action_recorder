@@ -1,16 +1,61 @@
+import sys
+import os
+
+# Fix Windows High-DPI scaling issue (mouse coordinate drift / magnification)
+if os.name == 'nt':
+    try:
+        import ctypes
+        ctypes.windll.shcore.SetProcessDpiAwareness(2) # 2 = PROCESS_PER_MONITOR_DPI_AWARE
+    except Exception:
+        try:
+            ctypes.windll.user32.SetProcessDPIAware()
+        except Exception:
+            pass
+
 import tkinter as tk
 from tkinter import ttk, messagebox, simpledialog
 from pynput import mouse, keyboard
 import time
-import os
 
 # Import custom modules
 from utils import format_time, serialize_events, deserialize_events
 from macro_runner import MacroRunner
+from translator import compile_macro_to_hid
+
+try:
+    import paramiko
+    HAS_PARAMIKO = True
+except ImportError:
+    HAS_PARAMIKO = False
 
 # Setup absolute path to the macros directory
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 RECORDED_DIR = os.path.join(BASE_DIR, "recorded")
+CONFIG_FILE = os.path.join(BASE_DIR, "opi_config.json")
+
+def load_opi_config():
+    if os.path.exists(CONFIG_FILE):
+        try:
+            with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
+                import json
+                cfg = json.load(f)
+                if "login" in cfg:
+                    return cfg
+                # Backward compatibility
+                host = cfg.get("host", "orangepi.local")
+                user = cfg.get("user", "orangepi")
+                return {"login": f"{user}@{host}"}
+        except Exception:
+            pass
+    return {"login": "orangepi@orangepi.local"}
+
+def save_opi_config(login):
+    try:
+        with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
+            import json
+            json.dump({"login": login}, f, indent=4, ensure_ascii=False)
+    except Exception:
+        pass
 
 def ensure_app_icon():
     """
@@ -68,7 +113,7 @@ class MacroApp:
     def __init__(self, root):
         self.root = root
         self.root.title("GUI Action Recorder")
-        self.root.geometry("450x540")  # Taller geometry to support panels cleanly
+        self.root.geometry("450x640")  # Taller geometry to support panels cleanly
         self.root.configure(bg="#f8fafc")
         
         # Set window icon
@@ -97,6 +142,12 @@ class MacroApp:
         # Recording mode state cache (default False: records all mouse moves)
         self.drag_only_mode = tk.BooleanVar(value=False)
         self.drag_only_mode_val = False
+        
+        # Orange Pi configuration & state
+        opi_cfg = load_opi_config()
+        self.opi_login = tk.StringVar(value=opi_cfg.get("login", "orangepi@orangepi.local"))
+        self.opi_password = ""
+        self.opi_log_buffer = ""
         
         # Hardware runners and listeners
         self.runner = MacroRunner()
@@ -179,6 +230,41 @@ class MacroApp:
         
         self.btn_save = self.create_btn(save_frame, "💾", self.save_recording, "#cbd5e1", "#1e293b", "#94a3b8", font_size=10)
         self.btn_save.pack(side=tk.RIGHT)
+
+        # ==========================================
+        # Panel 4: Orange Pi Panel (Warm Orange/Peach)
+        # ==========================================
+        self.panel_orangepi = tk.Frame(self.root, bg="#fff7ed", padx=16, pady=10)
+        self.panel_orangepi.pack(fill=tk.X, side=tk.BOTTOM)
+        
+        # OPi Login frame (user@host)
+        opi_input_frame = tk.Frame(self.panel_orangepi, bg="#fff7ed")
+        opi_input_frame.pack(fill=tk.X, pady=(0, 4))
+        
+        lbl_opi_login = tk.Label(opi_input_frame, text="OPi Login (user@host):", font=("Segoe UI", 9, "bold"), bg="#fff7ed", fg="#c2410c")
+        lbl_opi_login.pack(side=tk.LEFT)
+        
+        self.entry_opi_login = tk.Entry(
+            opi_input_frame, textvariable=self.opi_login, bd=1, relief="flat", highlightthickness=1,
+            highlightbackground="#cbd5e1", highlightcolor="#ea580c", font=("Segoe UI", 9), bg="#ffffff"
+        )
+        self.entry_opi_login.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(6, 0), ipady=3)
+        
+        # OPi Button Frame
+        opi_btn_frame = tk.Frame(self.panel_orangepi, bg="#fff7ed")
+        opi_btn_frame.pack(fill=tk.X, pady=(4, 0))
+        
+        # Compile & Upload Button
+        self.btn_opi_upload = self.create_btn(opi_btn_frame, "📤 Compile & Send", self.compile_and_upload_opi, "#f97316", "#ffffff", "#ea580c")
+        self.btn_opi_upload.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 4))
+        
+        # Play on OPi Button
+        self.btn_opi_play = self.create_btn(opi_btn_frame, "⚡ Play on OPi", self.play_on_opi, "#ea580c", "#ffffff", "#c2410c")
+        self.btn_opi_play.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(4, 4))
+        
+        # Toggle Debug Log Button
+        self.btn_opi_log = self.create_btn(opi_btn_frame, "📋 SSH Log", self.open_log_window, "#cbd5e1", "#1e293b", "#94a3b8")
+        self.btn_opi_log.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(4, 0))
 
         # ==========================================
         # Panel 3: Explorer & Playback Panel (Light Slate / Light Gray)
@@ -264,6 +350,10 @@ class MacroApp:
             self.btn_refresh.config(state=tk.NORMAL)
             self.btn_delete.config(state=tk.NORMAL)
             self.chk_drag_only.config(state=tk.NORMAL)
+            self.entry_opi_login.config(state=tk.NORMAL)
+            self.btn_opi_upload.config(state=tk.NORMAL)
+            self.btn_opi_play.config(state=tk.NORMAL)
+            self.btn_opi_log.config(state=tk.NORMAL)
         elif state == "recording":
             self.btn_record.config(state=tk.NORMAL)
             self.btn_play.config(state=tk.DISABLED)
@@ -275,7 +365,11 @@ class MacroApp:
             self.btn_refresh.config(state=tk.DISABLED)
             self.btn_delete.config(state=tk.DISABLED)
             self.chk_drag_only.config(state=tk.DISABLED)
-        elif state == "playing":
+            self.entry_opi_login.config(state=tk.DISABLED)
+            self.btn_opi_upload.config(state=tk.DISABLED)
+            self.btn_opi_play.config(state=tk.DISABLED)
+            self.btn_opi_log.config(state=tk.NORMAL)
+        elif state in ("playing", "opi_running"):
             self.btn_record.config(state=tk.DISABLED)
             self.btn_play.config(state=tk.DISABLED)
             self.entry_name.config(state=tk.DISABLED)
@@ -286,6 +380,10 @@ class MacroApp:
             self.btn_refresh.config(state=tk.DISABLED)
             self.btn_delete.config(state=tk.DISABLED)
             self.chk_drag_only.config(state=tk.DISABLED)
+            self.entry_opi_login.config(state=tk.DISABLED)
+            self.btn_opi_upload.config(state=tk.DISABLED)
+            self.btn_opi_play.config(state=tk.DISABLED)
+            self.btn_opi_log.config(state=tk.NORMAL)
 
     def toggle_record(self):
         """
@@ -913,6 +1011,340 @@ class MacroApp:
             
         # Play events
         self.runner.play(self.events, on_start, on_progress, on_finish)
+
+    def log_message(self, message):
+        """
+        Appends a message to the debug log text area.
+        Runs safely in the Tkinter main thread.
+        """
+        self.root.after(0, lambda: self._write_log(message))
+
+    def _write_log(self, message):
+        self.opi_log_buffer += message + "\n"
+        if hasattr(self, 'log_window') and self.log_window.winfo_exists():
+            self.log_text.config(state=tk.NORMAL)
+            self.log_text.insert(tk.END, message + "\n")
+            self.log_text.see(tk.END)
+            self.log_text.config(state=tk.DISABLED)
+
+    def _append_raw_log(self, text):
+        clean_text = text
+        if self.opi_password and self.opi_password in clean_text:
+            clean_text = clean_text.replace(self.opi_password, "********")
+            
+        self.opi_log_buffer += clean_text
+        if hasattr(self, 'log_window') and self.log_window.winfo_exists():
+            self.log_text.config(state=tk.NORMAL)
+            self.log_text.insert(tk.END, clean_text)
+            self.log_text.see(tk.END)
+            self.log_text.config(state=tk.DISABLED)
+
+    def _create_log_window(self):
+        self.log_window = tk.Toplevel(self.root)
+        self.log_window.title("Orange Pi SSH Debug Log")
+        self.log_window.geometry("550x380")
+        self.log_window.configure(bg="#1e293b")
+        
+        # Scrolled Text
+        from tkinter import scrolledtext
+        self.log_text = scrolledtext.ScrolledText(
+            self.log_window, bg="#0f172a", fg="#38bdf8", 
+            insertbackground="#ffffff", font=("Consolas", 10), relief="flat"
+        )
+        self.log_text.pack(fill=tk.BOTH, expand=True, padx=8, pady=8)
+        
+        # Pre-populate logs
+        self.log_text.insert(tk.END, self.opi_log_buffer)
+        self.log_text.see(tk.END)
+        self.log_text.config(state=tk.DISABLED)
+        
+        self.log_window.attributes("-topmost", True)
+
+    def open_log_window(self):
+        """
+        Manually opens the SSH Debug Log Window and populates it with the cached logs.
+        """
+        if not hasattr(self, 'log_window') or not self.log_window.winfo_exists():
+            self._create_log_window()
+        else:
+            self.log_window.lift() # Bring to front if already open
+
+    def compile_and_upload_opi(self):
+        """
+        Compiles the selected macro to a local .hid file and uploads it to Orange Pi via SFTP.
+        """
+        if not HAS_PARAMIKO:
+            messagebox.showerror("Error", "Paramiko library is not installed. Orange Pi features are unavailable.")
+            return
+
+        # Get selected folder and file
+        sel_folder = self.list_folders.curselection()
+        sel_file = self.list_files.curselection()
+        if not sel_folder or not sel_file:
+            messagebox.showwarning("Warning", "Please select a macro file to upload first!")
+            return
+
+        folder_name = self.list_folders.get(sel_folder[0])
+        file_name = self.list_files.get(sel_file[0])
+        
+        # Clear previous logs
+        self.opi_log_buffer = ""
+        if hasattr(self, 'log_window') and self.log_window.winfo_exists():
+            self.log_text.config(state=tk.NORMAL)
+            self.log_text.delete(1.0, tk.END)
+            self.log_text.config(state=tk.DISABLED)
+        
+        login = self.opi_login.get().strip()
+        if not login:
+            messagebox.showwarning("Warning", "Please enter your Orange Pi user@host login details.")
+            return
+
+        if '@' in login:
+            user, host = login.split('@', 1)
+        else:
+            user = "orangepi"
+            host = login
+
+        # Save config
+        save_opi_config(login)
+
+        # Get password
+        if not self.opi_password:
+            password = simpledialog.askstring("Password Required", f"Enter SSH password for {user}@{host}:", show='*')
+            if not password:
+                return
+            self.opi_password = password
+            
+        json_path = os.path.join(RECORDED_DIR, folder_name, file_name)
+        name_without_ext = os.path.splitext(file_name)[0]
+        local_hid_path = os.path.join(RECORDED_DIR, folder_name, name_without_ext + ".hid")
+        remote_file_name = name_without_ext + ".hid"
+
+        # Set UI state to running
+        self.set_gui_state("opi_running")
+        self.lbl_status.config(text="Status: Compiling macro...", fg="#ea580c")
+        
+        # Open log window and write header
+        self.log_message(f"=== Compile & Upload Macro to {user}@{host} ===")
+        self.log_message(f"Local Macro: {json_path}")
+        self.log_message(f"Local HID Binary: {local_hid_path}")
+
+        def upload_worker():
+            try:
+                # 1. Compile
+                self.log_message("\n[Local] Compiling JSON macro to HID binary format...")
+                success = compile_macro_to_hid(json_path, local_hid_path)
+                if not success:
+                    raise Exception("Failed to compile macro to HID binary using translator.")
+                self.log_message("[Local] Compilation successful.")
+                    
+                self.root.after(0, lambda: self.lbl_status.config(text="Status: Connecting to Orange Pi...", fg="#ea580c"))
+                self.log_message(f"[SSH] Connecting to {user}@{host} via SSH...")
+
+                # 2. SSH/SFTP connection
+                ssh = paramiko.SSHClient()
+                ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+                ssh.connect(host, username=user, password=self.opi_password, timeout=10)
+                self.log_message("[SSH] SSH Connection established successfully.")
+                
+                self.root.after(0, lambda: self.lbl_status.config(text="Status: Creating remote folders...", fg="#ea580c"))
+                
+                # Get home directory
+                stdin, stdout, stderr = ssh.exec_command("echo $HOME")
+                home_dir = stdout.read().decode().strip()
+                if not home_dir:
+                    home_dir = f"/home/{user}"
+                self.log_message(f"[SSH] Detected home directory: {home_dir}")
+                    
+                # Create remote directory
+                remote_dir = f"{home_dir}/pi_mouse/recorded"
+                self.log_message(f"[SSH] Ensuring remote directory exists: {remote_dir}")
+                ssh.exec_command(f"mkdir -p {remote_dir}")
+                
+                # Initialize SFTP
+                self.log_message("[SFTP] Opening SFTP channel...")
+                sftp = ssh.open_sftp()
+                
+                self.root.after(0, lambda: self.lbl_status.config(text="Status: Uploading file...", fg="#ea580c"))
+                
+                remote_file_path = f"{remote_dir}/{remote_file_name}"
+                self.log_message(f"[SFTP] Uploading: {local_hid_path} -> {remote_file_path}")
+                sftp.put(local_hid_path, remote_file_path)
+                self.log_message("[SFTP] File uploaded successfully.")
+                
+                sftp.close()
+                ssh.close()
+                self.log_message("[SSH] SSH connection closed.")
+                
+                self.root.after(0, lambda: self.set_gui_state("idle"))
+                self.root.after(0, lambda: self.lbl_status.config(text="Status: Compile & Upload successful", fg="#16a34a"))
+                self.root.after(0, lambda: messagebox.showinfo("Success", f"Macro successfully compiled and uploaded to {user}@{host}:{remote_file_path}"))
+                
+            except paramiko.AuthenticationException:
+                self.opi_password = "" # Clear cached wrong password
+                self.log_message("\n[ERROR] SSH authentication failed. Please verify credentials.")
+                self.root.after(0, lambda: self.set_gui_state("idle"))
+                self.root.after(0, lambda: self.lbl_status.config(text="Status: SSH Authentication Failed", fg="#dc2626"))
+                self.root.after(0, lambda: messagebox.showerror("Authentication Error", "SSH login failed. Please verify your password and username."))
+            except Exception as e:
+                self.opi_password = "" # Might be connection issue or wrong password
+                self.log_message(f"\n[ERROR] Operation failed: {str(e)}")
+                self.root.after(0, lambda: self.set_gui_state("idle"))
+                self.root.after(0, lambda: self.lbl_status.config(text="Status: Connection Failed", fg="#dc2626"))
+                self.root.after(0, lambda: messagebox.showerror("Error", f"Failed to upload to Orange Pi:\n{str(e)}"))
+
+        import threading
+        threading.Thread(target=upload_worker, daemon=True).start()
+
+    def play_on_opi(self):
+        """
+        Connects to Orange Pi via SSH and plays the uploaded macro using 'sudo /usr/bin/python3 /home/<user>/pi_mouse/play.py ...'.
+        """
+        if not HAS_PARAMIKO:
+            messagebox.showerror("Error", "Paramiko library is not installed. Orange Pi features are unavailable.")
+            return
+
+        # Get selected folder and file to know the macro name
+        sel_folder = self.list_folders.curselection()
+        sel_file = self.list_files.curselection()
+        if not sel_folder or not sel_file:
+            messagebox.showwarning("Warning", "Please select a macro file to play first!")
+            return
+
+        folder_name = self.list_folders.get(sel_folder[0])
+        file_name = self.list_files.get(sel_file[0])
+        name_without_ext = os.path.splitext(file_name)[0]
+        remote_file_name = name_without_ext + ".hid"
+
+        # Clear previous logs
+        self.opi_log_buffer = ""
+        if hasattr(self, 'log_window') and self.log_window.winfo_exists():
+            self.log_text.config(state=tk.NORMAL)
+            self.log_text.delete(1.0, tk.END)
+            self.log_text.config(state=tk.DISABLED)
+
+        login = self.opi_login.get().strip()
+        if not login:
+            messagebox.showwarning("Warning", "Please enter your Orange Pi user@host login details.")
+            return
+
+        if '@' in login:
+            user, host = login.split('@', 1)
+        else:
+            user = "orangepi"
+            host = login
+
+        # Save config
+        save_opi_config(login)
+
+        # Get password
+        if not self.opi_password:
+            password = simpledialog.askstring("Password Required", f"Enter SSH password for {user}@{host}:", show='*')
+            if not password:
+                return
+            self.opi_password = password
+
+        # Set UI state to running
+        self.set_gui_state("opi_running")
+        self.lbl_status.config(text="Status: Connecting to Orange Pi...", fg="#ea580c")
+        
+        self.log_message(f"=== Play Macro on {user}@{host} ===")
+        self.log_message(f"Remote Macro HID: {remote_file_name}")
+
+        def play_worker():
+            try:
+                self.log_message(f"[SSH] Connecting to {user}@{host}...")
+                # Connect
+                ssh = paramiko.SSHClient()
+                ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+                ssh.connect(host, username=user, password=self.opi_password, timeout=10)
+                self.log_message("[SSH] SSH Connection established.")
+                
+                self.root.after(0, lambda: self.lbl_status.config(text="Status: Playing macro on Orange Pi...", fg="#d97706"))
+
+                # Get home directory
+                stdin, stdout, stderr = ssh.exec_command("echo $HOME")
+                home_dir = stdout.read().decode().strip()
+                if not home_dir:
+                    home_dir = f"/home/{user}"
+                self.log_message(f"[SSH] Detected home directory: {home_dir}")
+
+                # Execute command with sudo -S to feed the password
+                cmd = f"sudo -S /usr/bin/python3 {home_dir}/pi_mouse/play.py {home_dir}/pi_mouse/recorded/{remote_file_name}"
+                self.log_message(f"[SSH] Executing: {cmd}")
+                
+                # We use get_pty=True so that sudo -S can receive input on the pseudo-terminal
+                stdin, stdout, stderr = ssh.exec_command(cmd, get_pty=True)
+                
+                self.log_message("[SSH] --- Command Output Stream Start ---")
+                
+                password_sent = False
+                
+                # Read output
+                while True:
+                    if stdout.channel.recv_ready():
+                        data = stdout.channel.recv(1024)
+                        if not data:
+                            break
+                        chunk = data.decode('utf-8', errors='ignore')
+                        self.root.after(0, lambda c=chunk: self._append_raw_log(c))
+                        
+                        # Check if sudo is asking for password
+                        chunk_lower = chunk.lower()
+                        if not password_sent and ("password" in chunk_lower or "密碼" in chunk_lower or "password:" in chunk_lower):
+                            self.log_message("\n[SSH] Password prompt detected, sending sudo password...")
+                            stdin.write(self.opi_password + "\n")
+                            stdin.flush()
+                            password_sent = True
+                    elif stdout.channel.exit_status_ready():
+                        break
+                    time.sleep(0.05)
+                    
+                # Final drain
+                while stdout.channel.recv_ready():
+                    data = stdout.channel.recv(1024)
+                    if data:
+                        chunk = data.decode('utf-8', errors='ignore')
+                        self.root.after(0, lambda c=chunk: self._append_raw_log(c))
+                        
+                # Close connection
+                exit_status = stdout.channel.recv_exit_status()
+                self.log_message(f"\n[SSH] Command completed with exit code: {exit_status}")
+                
+                ssh.close()
+                self.log_message("[SSH] Connection closed.")
+                
+                self.root.after(0, lambda: self.set_gui_state("idle"))
+                self.root.after(0, lambda: self.lbl_status.config(text="Status: Remote Playback Finished", fg="#16a34a"))
+                
+                # Check for file missing error in output log buffer
+                full_output = self.opi_log_buffer
+                is_file_missing = ("找不到" in full_output and ".hid" in full_output) or ("錯誤: 找不到" in full_output)
+                
+                if is_file_missing:
+                    self.root.after(0, lambda: messagebox.showwarning(
+                        "Warning", 
+                        f"Orange Pi error: Macro file not found on device!\n\nPath: {home_dir}/pi_mouse/recorded/{remote_file_name}\n\nPlease run 'Compile & Send' first."
+                    ))
+                elif exit_status == 0:
+                    self.root.after(0, lambda: messagebox.showinfo("Success", f"Playback finished successfully on Orange Pi!"))
+                else:
+                    self.root.after(0, lambda: messagebox.showerror("Playback Error", f"Playback failed on Orange Pi with exit code {exit_status}.\nCheck SSH Debug Log window for errors."))
+                
+            except paramiko.AuthenticationException:
+                self.opi_password = "" # Clear cached wrong password
+                self.log_message("\n[ERROR] SSH authentication failed. Please verify credentials.")
+                self.root.after(0, lambda: self.set_gui_state("idle"))
+                self.root.after(0, lambda: self.lbl_status.config(text="Status: SSH Authentication Failed", fg="#dc2626"))
+                self.root.after(0, lambda: messagebox.showerror("Authentication Error", "SSH login failed. Please verify your password and username."))
+            except Exception as e:
+                self.log_message(f"\n[ERROR] Operation failed: {str(e)}")
+                self.root.after(0, lambda: self.set_gui_state("idle"))
+                self.root.after(0, lambda: self.lbl_status.config(text="Status: Playback Failed", fg="#dc2626"))
+                self.root.after(0, lambda: messagebox.showerror("Error", f"Failed to execute playback on Orange Pi:\n{str(e)}"))
+
+        import threading
+        threading.Thread(target=play_worker, daemon=True).start()
 
     def on_close(self):
         """
