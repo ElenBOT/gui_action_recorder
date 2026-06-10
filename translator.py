@@ -114,6 +114,14 @@ def compile_macro_to_hid(json_path, output_bin_path):
     # 指令結構為: (delay_ms, dev_type, report_bytes)
     # dev_type: 0 代表鍵盤 (/dev/hidg0), 1 代表滑鼠 (/dev/hidg1)
     instructions = []
+    
+    # 產生滑鼠定位校準序列 (強迫相對移動至左上角 0, 0 座標點)
+    # 傳送 40 次相對移動 (-127, -127)，以確保在任何解析度的螢幕上都能抵達邊界 (0,0)
+    for _ in range(40):
+        # 每次移動延遲 2 毫秒，避免發送太快被系統丟棄
+        report = bytes([0x00, (-127) & 0xFF, (-127) & 0xFF, 0x00])
+        instructions.append((2, 1, report))
+        
     last_event_time = 0.0
 
     for i, event in enumerate(events):
