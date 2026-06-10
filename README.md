@@ -3,11 +3,11 @@
 <img width="1347" height="594" alt="image" src="https://github.com/user-attachments/assets/9f7e566f-749b-4ec1-9dfd-3260c46b90e4" />
 
 
-A lightweight and premium desktop macro automation suite. It allows you to record, manage, and execute mouse and keyboard actions with pixel-perfect precision.
+A lightweight desktop macro automation suite. It allows you to record and execute mouse and keyboard actions, locally or by an Orange Pi One.
 
 This project supports two main execution modes:
-1. **Local Playback**: Record keyboard and mouse inputs and replay them locally on your computer via software simulation.
-2. **Hardware Emulation (Anti-Cheat Bypass)**: Transpile recorded macros into raw USB HID binary packets and execute them using a single-board computer (like Orange Pi) configured as a physical USB OTG keyboard/mouse gadget. Because the host PC detects the Orange Pi as a real physical USB device, it successfully bypasses software-level anti-cheat and macro detection mechanisms.
+1. **Local Playback**: Record keyboard and mouse actions and replay it.
+2. **Hardware Emulation (Anti-Cheat Bypass)**: Transpile recorded actions into raw USB HID binary packets and execute them on Orange Pi One (or other SBC), used to bypasses software-level anti-cheat and macro detection mechanisms.
 
 ---
 
