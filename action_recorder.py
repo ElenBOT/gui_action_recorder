@@ -1225,7 +1225,7 @@ class MacroApp:
                 # Create remote directory
                 remote_dir = f"{home_dir}/pi_mouse/recorded"
                 self.log_message(f"[SSH] Ensuring remote directory exists: {remote_dir}")
-                ssh.exec_command(f"mkdir -p {remote_dir}")
+                ssh.exec_command(f'mkdir -p "{remote_dir}"')
                 
                 # Initialize SFTP
                 self.log_message("[SFTP] Opening SFTP channel...")
@@ -1336,7 +1336,7 @@ class MacroApp:
                 self.log_message(f"[SSH] Detected home directory: {home_dir}")
 
                 # Execute command with sudo -S to feed the password
-                cmd = f"sudo -S /usr/bin/python3 {home_dir}/pi_mouse/play.py {home_dir}/pi_mouse/recorded/{remote_file_name}"
+                cmd = f'sudo -S /usr/bin/python3 "{home_dir}/pi_mouse/play.py" "{home_dir}/pi_mouse/recorded/{remote_file_name}"'
                 self.log_message(f"[SSH] Executing: {cmd}")
                 
                 # We use get_pty=True so that sudo -S can receive input on the pseudo-terminal
@@ -1473,7 +1473,7 @@ class MacroApp:
                 self.log_message(f"[SSH] Detected home directory: {home_dir}")
 
                 # Execute setup_as_km.sh command with sudo -S to feed the password
-                cmd = f"sudo -S {home_dir}/pi_mouse/setup_as_km.sh"
+                cmd = f'sudo -S "{home_dir}/pi_mouse/setup_as_km.sh"'
                 self.log_message(f"[SSH] Executing: {cmd}")
                 
                 stdin, stdout, stderr = ssh.exec_command(cmd, get_pty=True)
