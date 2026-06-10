@@ -125,7 +125,7 @@ class MacroApp:
         scaled_width = int(base_width * scale_factor)
         scaled_height = int(base_height * scale_factor)
         self.root.geometry(f"{scaled_width}x{scaled_height}")
-        self.root.configure(bg="#f8fafc")
+        self.root.configure(bg="#f1f5f9")
         
         # Set window icon
         icon_path = ensure_app_icon()
@@ -194,25 +194,25 @@ class MacroApp:
         # ==========================================
         # Panel 1: Status Panel (Ice Blue) - Left Aligned
         # ==========================================
-        self.panel_status = tk.Frame(self.root, bg="#eff6ff", padx=16, pady=10)
+        self.panel_status = tk.Frame(self.root, bg="#dbeafe", padx=16, pady=10)
         self.panel_status.pack(fill=tk.X)
         
         self.lbl_status = tk.Label(
             self.panel_status, text="Status: Ready", 
-            font=("Segoe UI", 10, "bold"), fg="#1e40af", bg="#eff6ff"
+            font=("Segoe UI", 10, "bold"), fg="#1e40af", bg="#dbeafe"
         )
         self.lbl_status.pack(anchor=tk.W)
         
         self.lbl_hint = tk.Label(
             self.panel_status, text="[F8]: Start Record / Stop Record / Stop Playback", 
-            font=("Segoe UI", 9, "bold"), fg="#b91c1c", bg="#eff6ff"
+            font=("Segoe UI", 9, "bold"), fg="#b91c1c", bg="#dbeafe"
         )
         self.lbl_hint.pack(anchor=tk.W, pady=(2, 0))
 
         # ==========================================
         # Panel 2: Recording & Saving Panel (Mint Green, Swapped to Upper Section)
         # ==========================================
-        self.panel_record = tk.Frame(self.root, bg="#f0fdf4", padx=16, pady=10)
+        self.panel_record = tk.Frame(self.root, bg="#dcfce7", padx=16, pady=10)
         self.panel_record.pack(fill=tk.X)
         
         # Record button
@@ -222,15 +222,15 @@ class MacroApp:
         # Mode Checkbox
         self.chk_drag_only = tk.Checkbutton(
             self.panel_record, text="Record mouse movement only when dragging", variable=self.drag_only_mode,
-            bg="#f0fdf4", activebackground="#f0fdf4", fg="#166534", font=("Segoe UI", 9), selectcolor="#ffffff"
+            bg="#dcfce7", activebackground="#dcfce7", fg="#166534", font=("Segoe UI", 9), selectcolor="#ffffff"
         )
         self.chk_drag_only.pack(anchor=tk.W, pady=(0, 4))
         
         # Save Fields Frame
-        save_frame = tk.Frame(self.panel_record, bg="#f0fdf4")
+        save_frame = tk.Frame(self.panel_record, bg="#dcfce7")
         save_frame.pack(fill=tk.X, pady=(4, 0))
         
-        lbl_name = tk.Label(save_frame, text="Save Name:", font=("Segoe UI", 9, "bold"), bg="#f0fdf4", fg="#166534")
+        lbl_name = tk.Label(save_frame, text="Save Name:", font=("Segoe UI", 9, "bold"), bg="#dcfce7", fg="#166534")
         lbl_name.pack(side=tk.LEFT)
         
         self.entry_name = tk.Entry(
@@ -245,14 +245,14 @@ class MacroApp:
         # ==========================================
         # Panel 4: Orange Pi Panel (Warm Orange/Peach)
         # ==========================================
-        self.panel_orangepi = tk.Frame(self.root, bg="#fff7ed", padx=16, pady=10)
+        self.panel_orangepi = tk.Frame(self.root, bg="#ffedd5", padx=16, pady=10)
         self.panel_orangepi.pack(fill=tk.X, side=tk.BOTTOM)
         
         # OPi Login frame (user@host)
-        opi_input_frame = tk.Frame(self.panel_orangepi, bg="#fff7ed")
+        opi_input_frame = tk.Frame(self.panel_orangepi, bg="#ffedd5")
         opi_input_frame.pack(fill=tk.X, pady=(0, 4))
         
-        lbl_opi_login = tk.Label(opi_input_frame, text="OPi Login (user@host):", font=("Segoe UI", 9, "bold"), bg="#fff7ed", fg="#c2410c")
+        lbl_opi_login = tk.Label(opi_input_frame, text="OPi Login (user@host):", font=("Segoe UI", 9, "bold"), bg="#ffedd5", fg="#c2410c")
         lbl_opi_login.pack(side=tk.LEFT)
         
         self.entry_opi_login = tk.Entry(
@@ -261,36 +261,44 @@ class MacroApp:
         )
         self.entry_opi_login.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(6, 0), ipady=3)
         
-        # OPi Button Frame
-        opi_btn_frame = tk.Frame(self.panel_orangepi, bg="#fff7ed")
-        opi_btn_frame.pack(fill=tk.X, pady=(4, 0))
+        # OPi Button Grid Frame
+        opi_btn_frame = tk.Frame(self.panel_orangepi, bg="#ffedd5")
+        opi_btn_frame.pack(fill=tk.X, pady=(6, 0))
+        
+        # Configure columns to have equal weight so they are exactly identical in width
+        opi_btn_frame.columnconfigure(0, weight=1)
+        opi_btn_frame.columnconfigure(1, weight=1)
         
         # Compile & Upload Button
         self.btn_opi_upload = self.create_btn(opi_btn_frame, "📤 Compile & Send", self.compile_and_upload_opi, "#f97316", "#ffffff", "#ea580c")
-        self.btn_opi_upload.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 4))
+        self.btn_opi_upload.grid(row=0, column=0, sticky="ew", padx=(0, 4), pady=(0, 4))
         
         # Play on OPi Button
         self.btn_opi_play = self.create_btn(opi_btn_frame, "⚡ Play on OPi", self.play_on_opi, "#ea580c", "#ffffff", "#c2410c")
-        self.btn_opi_play.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(4, 4))
+        self.btn_opi_play.grid(row=0, column=1, sticky="ew", padx=(4, 0), pady=(0, 4))
+        
+        # Init USB Gadget Button
+        self.btn_opi_init = self.create_btn(opi_btn_frame, "🔧 Init USB Gadget", self.init_opi_gadget, "#0d9488", "#ffffff", "#0f766e")
+        self.btn_opi_init.grid(row=1, column=0, sticky="ew", padx=(0, 4), pady=(4, 0))
         
         # Toggle Debug Log Button
         self.btn_opi_log = self.create_btn(opi_btn_frame, "📋 SSH Log", self.open_log_window, "#cbd5e1", "#1e293b", "#94a3b8")
-        self.btn_opi_log.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(4, 0))
+        self.btn_opi_log.grid(row=1, column=1, sticky="ew", padx=(4, 0), pady=(4, 0))
 
         # ==========================================
         # Panel 3: Explorer & Playback Panel (Light Slate / Light Gray)
         # ==========================================
-        self.panel_explore = tk.Frame(self.root, bg="#f8fafc", padx=16, pady=10)
+        self.panel_explore = tk.Frame(self.root, bg="#e2e8f0", padx=16, pady=10)
         self.panel_explore.pack(fill=tk.BOTH, expand=True)
         
-        explorer_frame = tk.Frame(self.panel_explore, bg="#f8fafc")
+        explorer_frame = tk.Frame(self.panel_explore, bg="#e2e8f0")
         explorer_frame.pack(fill=tk.BOTH, expand=True)
         
         # Left column - Folders List
-        left_frame = tk.Frame(explorer_frame, bg="#f8fafc")
+        left_frame = tk.Frame(explorer_frame, bg="#e2e8f0")
         left_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 6))
         
-        lbl_folders = tk.Label(left_frame, text="Folders", font=("Segoe UI", 9, "bold"), bg="#f8fafc", fg="#475569")
+        lbl_folders = tk.Label(left_frame, text="Folders", font=("Segoe UI", 9, "bold"), bg="#e2e8f0", fg="#475569")
         lbl_folders.pack(anchor=tk.W, pady=2)
         
         self.list_folders = tk.Listbox(
@@ -304,10 +312,10 @@ class MacroApp:
         self.list_folders.bind("<<ListboxSelect>>", self.on_folder_selected)
         
         # Right column - Macros List
-        right_frame = tk.Frame(explorer_frame, bg="#f8fafc")
+        right_frame = tk.Frame(explorer_frame, bg="#e2e8f0")
         right_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(6, 0))
         
-        lbl_files = tk.Label(right_frame, text="Macros", font=("Segoe UI", 9, "bold"), bg="#f8fafc", fg="#475569")
+        lbl_files = tk.Label(right_frame, text="Macros", font=("Segoe UI", 9, "bold"), bg="#e2e8f0", fg="#475569")
         lbl_files.pack(anchor=tk.W, pady=2)
         
         self.list_files = tk.Listbox(
@@ -324,7 +332,7 @@ class MacroApp:
         self.list_files.bind("<ButtonRelease-1>", self.on_drag_drop)
         
         # Explorer Toolbar (Unicode Folder+ / Refresh Icons)
-        toolbar_frame = tk.Frame(self.panel_explore, bg="#f8fafc")
+        toolbar_frame = tk.Frame(self.panel_explore, bg="#e2e8f0")
         toolbar_frame.pack(pady=4, fill=tk.X)
         
         self.btn_new_folder = self.create_btn(toolbar_frame, "📁⁺", self.create_folder, "#e2e8f0", "#475569", "#cbd5e1", font_size=10)
@@ -338,7 +346,7 @@ class MacroApp:
         
         self.lbl_info = tk.Label(
             toolbar_frame, text="",
-            font=("Segoe UI", 8), fg="#64748b", bg="#f8fafc", justify=tk.RIGHT
+            font=("Segoe UI", 8), fg="#64748b", bg="#e2e8f0", justify=tk.RIGHT
         )
         self.lbl_info.pack(side=tk.RIGHT, fill=tk.X, expand=True, anchor=tk.E)
         
@@ -364,6 +372,7 @@ class MacroApp:
             self.entry_opi_login.config(state=tk.NORMAL)
             self.btn_opi_upload.config(state=tk.NORMAL)
             self.btn_opi_play.config(state=tk.NORMAL)
+            self.btn_opi_init.config(state=tk.NORMAL)
             self.btn_opi_log.config(state=tk.NORMAL)
         elif state == "recording":
             self.btn_record.config(state=tk.NORMAL)
@@ -379,6 +388,7 @@ class MacroApp:
             self.entry_opi_login.config(state=tk.DISABLED)
             self.btn_opi_upload.config(state=tk.DISABLED)
             self.btn_opi_play.config(state=tk.DISABLED)
+            self.btn_opi_init.config(state=tk.DISABLED)
             self.btn_opi_log.config(state=tk.NORMAL)
         elif state in ("playing", "opi_running"):
             self.btn_record.config(state=tk.DISABLED)
@@ -394,6 +404,7 @@ class MacroApp:
             self.entry_opi_login.config(state=tk.DISABLED)
             self.btn_opi_upload.config(state=tk.DISABLED)
             self.btn_opi_play.config(state=tk.DISABLED)
+            self.btn_opi_init.config(state=tk.DISABLED)
             self.btn_opi_log.config(state=tk.NORMAL)
 
     def toggle_record(self):
@@ -1373,6 +1384,134 @@ class MacroApp:
 
         import threading
         threading.Thread(target=play_worker, daemon=True).start()
+
+    def init_opi_gadget(self):
+        """
+        Connects to Orange Pi via SSH and runs setup_as_km.sh to initialize USB HID Keyboard/Mouse gadget.
+        """
+        if not HAS_PARAMIKO:
+            messagebox.showerror("Error", "Paramiko library is not installed. Orange Pi features are unavailable.")
+            return
+
+        # Clear previous logs
+        self.opi_log_buffer = ""
+        if hasattr(self, 'log_window') and self.log_window.winfo_exists():
+            self.log_text.config(state=tk.NORMAL)
+            self.log_text.delete(1.0, tk.END)
+            self.log_text.config(state=tk.DISABLED)
+
+        login = self.opi_login.get().strip()
+        if not login:
+            messagebox.showwarning("Warning", "Please enter your Orange Pi user@host login details.")
+            return
+
+        if '@' in login:
+            user, host = login.split('@', 1)
+        else:
+            user = "orangepi"
+            host = login
+
+        # Save config
+        save_opi_config(login)
+
+        # Get password
+        if not self.opi_password:
+            password = simpledialog.askstring("Password Required", f"Enter SSH password for {user}@{host}:", show='*')
+            if not password:
+                return
+            self.opi_password = password
+
+        # Set UI state to running
+        self.set_gui_state("opi_running")
+        self.lbl_status.config(text="Status: Connecting to Orange Pi...", fg="#ea580c")
+        
+        self.log_message(f"=== Initialize USB Gadget on {user}@{host} ===")
+
+        def init_worker():
+            try:
+                self.log_message(f"[SSH] Connecting to {user}@{host}...")
+                # Connect
+                ssh = paramiko.SSHClient()
+                ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+                ssh.connect(host, username=user, password=self.opi_password, timeout=10)
+                self.log_message("[SSH] SSH Connection established.")
+                
+                self.root.after(0, lambda: self.lbl_status.config(text="Status: Initializing USB gadget...", fg="#0d9488"))
+
+                # Get home directory
+                stdin, stdout, stderr = ssh.exec_command("echo $HOME")
+                home_dir = stdout.read().decode().strip()
+                if not home_dir:
+                    home_dir = f"/home/{user}"
+                self.log_message(f"[SSH] Detected home directory: {home_dir}")
+
+                # Execute setup_as_km.sh command with sudo -S to feed the password
+                cmd = f"sudo -S {home_dir}/pi_mouse/setup_as_km.sh"
+                self.log_message(f"[SSH] Executing: {cmd}")
+                
+                stdin, stdout, stderr = ssh.exec_command(cmd, get_pty=True)
+                
+                self.log_message("[SSH] --- Command Output Stream Start ---")
+                
+                password_sent = False
+                
+                # Read output
+                while True:
+                    if stdout.channel.recv_ready():
+                        data = stdout.channel.recv(1024)
+                        if not data:
+                            break
+                        chunk = data.decode('utf-8', errors='ignore')
+                        self.root.after(0, lambda c=chunk: self._append_raw_log(c))
+                        
+                        # Check if sudo is asking for password
+                        chunk_lower = chunk.lower()
+                        if not password_sent and ("password" in chunk_lower or "密碼" in chunk_lower or "password:" in chunk_lower):
+                            self.log_message("\n[SSH] Password prompt detected, sending sudo password...")
+                            stdin.write(self.opi_password + "\n")
+                            stdin.flush()
+                            password_sent = True
+                    elif stdout.channel.exit_status_ready():
+                        break
+                    time.sleep(0.05)
+                    
+                # Final drain
+                while stdout.channel.recv_ready():
+                    data = stdout.channel.recv(1024)
+                    if data:
+                        chunk = data.decode('utf-8', errors='ignore')
+                        self.root.after(0, lambda c=chunk: self._append_raw_log(c))
+                        
+                # Close connection
+                exit_status = stdout.channel.recv_exit_status()
+                self.log_message(f"\n[SSH] Command completed with exit code: {exit_status}")
+                
+                ssh.close()
+                self.log_message("[SSH] Connection closed.")
+                
+                self.root.after(0, lambda: self.set_gui_state("idle"))
+                
+                if exit_status == 0:
+                    self.root.after(0, lambda: self.lbl_status.config(text="Status: USB Gadget Initialized", fg="#16a34a"))
+                    self.root.after(0, lambda: messagebox.showinfo("Success", f"USB Gadget initialized successfully on Orange Pi!"))
+                else:
+                    self.root.after(0, lambda: self.lbl_status.config(text="Status: Gadget Init Failed", fg="#dc2626"))
+                    self.root.after(0, lambda: messagebox.showerror("Init Error", f"USB Gadget initialization failed on Orange Pi with exit code {exit_status}.\nCheck SSH Debug Log window for errors."))
+                
+            except paramiko.AuthenticationException:
+                self.opi_password = "" # Clear cached wrong password
+                self.log_message("\n[ERROR] SSH authentication failed. Please verify credentials.")
+                self.root.after(0, lambda: self.set_gui_state("idle"))
+                self.root.after(0, lambda: self.lbl_status.config(text="Status: SSH Authentication Failed", fg="#dc2626"))
+                self.root.after(0, lambda: messagebox.showerror("Authentication Error", "SSH login failed. Please verify your password and username."))
+            except Exception as e:
+                self.log_message(f"\n[ERROR] Operation failed: {str(e)}")
+                self.root.after(0, lambda: self.set_gui_state("idle"))
+                self.root.after(0, lambda: self.lbl_status.config(text="Status: Gadget Init Failed", fg="#dc2626"))
+                self.root.after(0, lambda: messagebox.showerror("Error", f"Failed to initialize USB Gadget on Orange Pi:\n{str(e)}"))
+
+        import threading
+        threading.Thread(target=init_worker, daemon=True).start()
 
     def on_close(self):
         """
