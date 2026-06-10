@@ -113,7 +113,18 @@ class MacroApp:
     def __init__(self, root):
         self.root = root
         self.root.title("GUI Action Recorder")
-        self.root.geometry("450x640")  # Taller geometry to support panels cleanly
+        # Calculate dynamic window geometry based on system DPI scaling
+        base_width = 460
+        base_height = 660
+        try:
+            dpi = self.root.winfo_fpixels('1i')
+            scale_factor = dpi / 96.0
+        except Exception:
+            scale_factor = 1.0
+            
+        scaled_width = int(base_width * scale_factor)
+        scaled_height = int(base_height * scale_factor)
+        self.root.geometry(f"{scaled_width}x{scaled_height}")
         self.root.configure(bg="#f8fafc")
         
         # Set window icon
@@ -1042,7 +1053,18 @@ class MacroApp:
     def _create_log_window(self):
         self.log_window = tk.Toplevel(self.root)
         self.log_window.title("Orange Pi SSH Debug Log")
-        self.log_window.geometry("550x380")
+        
+        # Scale log window geometry based on monitor DPI
+        base_w, base_h = 550, 380
+        try:
+            dpi = self.log_window.winfo_fpixels('1i')
+            scale = dpi / 96.0
+        except Exception:
+            scale = 1.0
+        scaled_w = int(base_w * scale)
+        scaled_h = int(base_h * scale)
+        self.log_window.geometry(f"{scaled_w}x{scaled_h}")
+        
         self.log_window.configure(bg="#1e293b")
         
         # Scrolled Text
