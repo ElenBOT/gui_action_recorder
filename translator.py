@@ -64,24 +64,7 @@ def get_hid_scancode(key):
     scancode = KEY_TO_HID.get(key_str)
     return scancode, shift_mask
 
-def split_mouse_displacement(delta):
-    """
-    將大於 127 或小於 -127 的滑鼠位移量分割成多個介於 [-127, 127] 的報告步驟。
-    """
-    steps = []
-    while delta != 0:
-        if delta > 127:
-            steps.append(127)
-            delta -= 127
-        elif delta < -127:
-            steps.append(-127)
-            delta += 127
-        else:
-            steps.append(delta)
-            delta = 0
-    return steps
-
-def compile_macro_to_hid(json_path, output_bin_path):
+def compile_macro_to_hid(json_path, output_bin_path, screen_width=1920, screen_height=1080):
     """
     讀取 JSON 巨集檔案並轉譯輸出為 OrangePi 可執行的二進位檔案 (.hid)。
     """
@@ -97,7 +80,7 @@ def compile_macro_to_hid(json_path, output_bin_path):
         print(f"解析 JSON 錯誤: {e}")
         return False
 
-    print(f"正在載入巨集 {json_path} ... 共 {len(events)} 個事件。")
+    print(f"正在載入巨集 {json_path} ... 共 {len(events)} 個事件。設定解析度: {screen_width}x{screen_height}")
     
     # 追蹤硬體狀態
     # 鍵盤狀態
@@ -107,21 +90,13 @@ def compile_macro_to_hid(json_path, output_bin_path):
     # 滑鼠按鍵狀態遮罩 (追蹤當前是否有按住滑鼠按鍵)
     current_button_mask = 0x00
     
-    # 滑鼠位置狀態 (座標定位)
-    last_x, last_y = 0, 0
-    
     # 輸出指令集
     # 指令結構為: (delay_ms, dev_type, report_bytes)
     # dev_type: 0 代表鍵盤 (/dev/hidg0), 1 代表滑鼠 (/dev/hidg1)
     instructions = []
     
-    # 產生滑鼠定位校準序列 (強迫相對移動至左上角 0, 0 座標點)
-    # 傳送 40 次相對移動 (-127, -127)，以確保在任何解析度的螢幕上都能抵達邊界 (0,0)
-    for _ in range(40):
-        # 每次移動延遲 2 毫秒，避免發送太快被系統丟棄
-        report = bytes([0x00, (-127) & 0xFF, (-127) & 0xFF, 0x00])
-        instructions.append((2, 1, report))
-        
+    # 絕對座標觸控螢幕/繪圖板不需要相對位移校準，直接移除舊的 40 次 (-127, -127) 移動
+    
     last_event_time = 0.0
 
     for i, event in enumerate(events):
@@ -137,30 +112,7 @@ def compile_macro_to_hid(json_path, output_bin_path):
             # 滑鼠按鍵事件
             _, _, x, y, button, pressed = event
             
-            # 1. 計算位移量 (絕對轉相對)
-            dx = x - last_x
-            dy = y - last_y
-            
-            steps_x = split_mouse_displacement(dx)
-            steps_y = split_mouse_displacement(dy)
-            max_steps = max(len(steps_x), len(steps_y))
-            
-            # 將相對位移分割發送
-            # 移動時以當前的滑鼠按鍵按住狀態發送，但在此事件之前尚未套用新的按下/放開
-            for step_idx in range(max_steps):
-                step_x = steps_x[step_idx] if step_idx < len(steps_x) else 0
-                step_y = steps_y[step_idx] if step_idx < len(steps_y) else 0
-                
-                # 第一個移動步驟繼承原本事件的 delay，其餘步驟為 5 毫秒微小延遲
-                current_delay = delay_ms if step_idx == 0 else 5
-                
-                report = bytes([current_button_mask, step_x & 0xFF, step_y & 0xFF, 0x00])
-                instructions.append((current_delay, 1, report))
-            
-            # 更新滑鼠基準點
-            last_x, last_y = x, y
-            
-            # 2. 更新當前的按鍵狀態遮罩
+            # 1. 更新當前的按鍵狀態遮罩
             button_mask = 0
             if button == mouse.Button.left:
                 button_mask = 0x01
@@ -174,33 +126,25 @@ def compile_macro_to_hid(json_path, output_bin_path):
             else:
                 current_button_mask &= ~button_mask
                 
-            # 發送點擊或放開報告
-            click_delay = 5 if max_steps > 0 else delay_ms
-            report = bytes([current_button_mask, 0x00, 0x00, 0x00])
-            instructions.append((click_delay, 1, report))
+            # 2. 計算絕對座標 (對應到 HID 的 0 ~ 32767)
+            hid_x = int(max(0, min(32767, (x / screen_width) * 32767)))
+            hid_y = int(max(0, min(32767, (y / screen_height) * 32767)))
+            
+            # 3. 產生 5 位元組絕對滑鼠報告: [buttons, abs_x_low, abs_x_high, abs_y_low, abs_y_high]
+            report = struct.pack("<BHH", current_button_mask, hid_x, hid_y)
+            instructions.append((delay_ms, 1, report))
 
         elif event_type == 'mousemove':
-            # 滑鼠移動事件 (僅在按住按鍵時拖曳)
+            # 滑鼠移動事件
             _, _, x, y = event
             
-            dx = x - last_x
-            dy = y - last_y
+            # 1. 計算絕對座標
+            hid_x = int(max(0, min(32767, (x / screen_width) * 32767)))
+            hid_y = int(max(0, min(32767, (y / screen_height) * 32767)))
             
-            steps_x = split_mouse_displacement(dx)
-            steps_y = split_mouse_displacement(dy)
-            max_steps = max(len(steps_x), len(steps_y))
-            
-            for step_idx in range(max_steps):
-                step_x = steps_x[step_idx] if step_idx < len(steps_x) else 0
-                step_y = steps_y[step_idx] if step_idx < len(steps_y) else 0
-                
-                current_delay = delay_ms if step_idx == 0 else 5
-                
-                # 拖曳時，必須維持 current_button_mask 的按鍵狀態
-                report = bytes([current_button_mask, step_x & 0xFF, step_y & 0xFF, 0x00])
-                instructions.append((current_delay, 1, report))
-                
-            last_x, last_y = x, y
+            # 2. 產生 5 位元組絕對滑鼠報告
+            report = struct.pack("<BHH", current_button_mask, hid_x, hid_y)
+            instructions.append((delay_ms, 1, report))
 
         elif event_type in ('keydown', 'keyup'):
             # 鍵盤事件
@@ -248,8 +192,6 @@ def compile_macro_to_hid(json_path, output_bin_path):
             instructions.append((delay_ms, 0, report))
 
     # 將所有指令編譯寫入二進位檔 (.hid)
-    # 結構:
-    #   [Delay (4B Uint32)] + [Device (1B: 0=K, 1=M)] + [Len (1B)] + [Report Bytes]
     try:
         with open(output_bin_path, 'wb') as bin_file:
             for instr in instructions:
@@ -265,15 +207,31 @@ def compile_macro_to_hid(json_path, output_bin_path):
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("使用說明: python translator.py <錄製的JSON檔案路徑> [輸出的二進位檔案路徑]")
+        print("使用說明: python translator.py <錄製的JSON檔案路徑> [輸出的二進位檔案路徑] [螢幕寬度] [螢幕高度]")
         sys.exit(1)
         
     json_in = sys.argv[1]
-    if len(sys.argv) >= 3:
-        bin_out = sys.argv[2]
-    else:
-        # 預設同檔名 .hid
+    bin_out = None
+    width = 1920
+    height = 1080
+    
+    # 解析參數
+    args = sys.argv[2:]
+    if args:
+        # 如果第一個參數是純數字，代表它是寬度，否則它是輸出二進位路徑
+        if args[0].isdigit():
+            width = int(args[0])
+            if len(args) >= 2 and args[1].isdigit():
+                height = int(args[1])
+        else:
+            bin_out = args[0]
+            if len(args) >= 2 and args[1].isdigit():
+                width = int(args[1])
+            if len(args) >= 3 and args[2].isdigit():
+                height = int(args[2])
+                
+    if not bin_out:
         base_name, _ = os.path.splitext(json_in)
         bin_out = base_name + ".hid"
         
-    compile_macro_to_hid(json_in, bin_out)
+    compile_macro_to_hid(json_in, bin_out, width, height)

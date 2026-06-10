@@ -70,7 +70,7 @@ def play_hid_file(file_path, keyboard_path="/dev/hidg0", mouse_path="/dev/hidg1"
         print("已釋放所有鍵盤按鍵並關閉節點。")
     if mse_f:
         # 發送全放開報告
-        mse_f.write(bytes([0x00] * 4))
+        mse_f.write(bytes([0x00] * 5))
         mse_f.close()
         print("已釋放所有滑鼠按鍵並關閉節點。")
         

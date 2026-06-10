@@ -1155,7 +1155,13 @@ class MacroApp:
             try:
                 # 1. Compile
                 self.log_message("\n[Local] Compiling JSON macro to HID binary format...")
-                success = compile_macro_to_hid(json_path, local_hid_path)
+                try:
+                    screen_width = self.root.winfo_screenwidth()
+                    screen_height = self.root.winfo_screenheight()
+                except Exception:
+                    screen_width, screen_height = 1920, 1080
+                self.log_message(f"[Local] Detected screen resolution: {screen_width}x{screen_height}")
+                success = compile_macro_to_hid(json_path, local_hid_path, screen_width, screen_height)
                 if not success:
                     raise Exception("Failed to compile macro to HID binary using translator.")
                 self.log_message("[Local] Compilation successful.")
