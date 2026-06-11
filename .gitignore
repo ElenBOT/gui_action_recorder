@@ -137,3 +137,7 @@ cython_debug/
 
 # Dynamically generated assets
 app_icon.ppm
+
+# User recordings and configurations
+recorded/
+opi_config.json

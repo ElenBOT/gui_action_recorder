@@ -186,6 +186,8 @@ class MacroApp:
         self.opi_login = tk.StringVar(value=opi_cfg.get("login", "orangepi@orangepi.local"))
         self.opi_password = ""
         self.opi_log_buffer = ""
+        self.ssh_client = None
+        self.opi_home_dir = None
         
         # Hardware runners and listeners
         self.runner = MacroRunner()
@@ -200,6 +202,9 @@ class MacroApp:
         
         # Load directories explorer
         self.refresh_explorer()
+        
+        # Set initial GUI state
+        self.set_gui_state("idle")
 
     def create_btn(self, parent, text, command, bg_color, fg_color, hover_color, font_size=10):
         """
@@ -300,8 +305,8 @@ class MacroApp:
         self.btn_opi_upload = self.create_btn(opi_btn_frame, "📤 Compile & Send", self.compile_and_upload_opi, "#f97316", "#ffffff", "#ea580c")
         self.btn_opi_upload.grid(row=0, column=0, sticky="ew", padx=(0, 4), pady=(0, 4))
         
-        # Play on OPi Button
-        self.btn_opi_play = self.create_btn(opi_btn_frame, "⚡ Play on OPi", self.play_on_opi, "#ea580c", "#ffffff", "#c2410c")
+        # Play by OPi Button
+        self.btn_opi_play = self.create_btn(opi_btn_frame, "⚡ Play by OPi", self.play_by_opi, "#ea580c", "#ffffff", "#c2410c")
         self.btn_opi_play.grid(row=0, column=1, sticky="ew", padx=(4, 0), pady=(0, 4))
         
         # Init USB Gadget Button
@@ -309,7 +314,7 @@ class MacroApp:
         self.btn_opi_init.grid(row=1, column=0, sticky="ew", padx=(0, 4), pady=(4, 0))
         
         # Toggle Debug Log Button
-        self.btn_opi_log = self.create_btn(opi_btn_frame, "📋 SSH Log", self.open_log_window, "#cbd5e1", "#1e293b", "#94a3b8")
+        self.btn_opi_log = self.create_btn(opi_btn_frame, "📋 SSH Log", self.open_log_window, "#64748b", "#ffffff", "#475569")
         self.btn_opi_log.grid(row=1, column=1, sticky="ew", padx=(4, 0), pady=(4, 0))
 
         # ==========================================
@@ -396,11 +401,25 @@ class MacroApp:
             self.btn_refresh.config(state=tk.NORMAL)
             self.btn_delete.config(state=tk.NORMAL)
             self.chk_drag_only.config(state=tk.NORMAL)
-            self.entry_opi_login.config(state=tk.NORMAL)
-            self.btn_opi_upload.config(state=tk.NORMAL)
-            self.btn_opi_play.config(state=tk.NORMAL)
-            self.btn_opi_init.config(state=tk.NORMAL)
+            
+            # OPi widgets conditional on connection
+            if self.ssh_client is not None:
+                self.entry_opi_login.config(state=tk.DISABLED)
+                self.btn_opi_upload.config(state=tk.NORMAL, bg="#f97316", fg="#ffffff")
+                self.btn_opi_play.config(state=tk.NORMAL, bg="#ea580c", fg="#ffffff")
+                self.btn_opi_init.config(state=tk.NORMAL, text="🔌 Disconnect", bg="#ef4444", activebackground="#dc2626")
+                self.btn_opi_init.bind("<Enter>", lambda e: self.btn_opi_init.config(bg="#dc2626") if self.btn_opi_init.cget("state") == tk.NORMAL else None)
+                self.btn_opi_init.bind("<Leave>", lambda e: self.btn_opi_init.config(bg="#ef4444") if self.btn_opi_init.cget("state") == tk.NORMAL else None)
+            else:
+                self.entry_opi_login.config(state=tk.NORMAL)
+                self.btn_opi_upload.config(state=tk.DISABLED, bg="#cbd5e1", fg="#94a3b8")
+                self.btn_opi_play.config(state=tk.DISABLED, bg="#cbd5e1", fg="#94a3b8")
+                self.btn_opi_init.config(state=tk.NORMAL, text="🔧 Init USB Gadget", bg="#0d9488", activebackground="#0f766e")
+                self.btn_opi_init.bind("<Enter>", lambda e: self.btn_opi_init.config(bg="#0f766e") if self.btn_opi_init.cget("state") == tk.NORMAL else None)
+                self.btn_opi_init.bind("<Leave>", lambda e: self.btn_opi_init.config(bg="#0d9488") if self.btn_opi_init.cget("state") == tk.NORMAL else None)
+                
             self.btn_opi_log.config(state=tk.NORMAL)
+            
         elif state == "recording":
             self.btn_record.config(state=tk.NORMAL)
             self.btn_play.config(state=tk.DISABLED)
@@ -412,11 +431,13 @@ class MacroApp:
             self.btn_refresh.config(state=tk.DISABLED)
             self.btn_delete.config(state=tk.DISABLED)
             self.chk_drag_only.config(state=tk.DISABLED)
+            
             self.entry_opi_login.config(state=tk.DISABLED)
-            self.btn_opi_upload.config(state=tk.DISABLED)
-            self.btn_opi_play.config(state=tk.DISABLED)
-            self.btn_opi_init.config(state=tk.DISABLED)
+            self.btn_opi_upload.config(state=tk.DISABLED, bg="#cbd5e1", fg="#94a3b8")
+            self.btn_opi_play.config(state=tk.DISABLED, bg="#cbd5e1", fg="#94a3b8")
+            self.btn_opi_init.config(state=tk.DISABLED, bg="#cbd5e1", fg="#94a3b8")
             self.btn_opi_log.config(state=tk.NORMAL)
+            
         elif state in ("playing", "opi_running"):
             self.btn_record.config(state=tk.DISABLED)
             self.btn_play.config(state=tk.DISABLED)
@@ -428,10 +449,11 @@ class MacroApp:
             self.btn_refresh.config(state=tk.DISABLED)
             self.btn_delete.config(state=tk.DISABLED)
             self.chk_drag_only.config(state=tk.DISABLED)
+            
             self.entry_opi_login.config(state=tk.DISABLED)
-            self.btn_opi_upload.config(state=tk.DISABLED)
-            self.btn_opi_play.config(state=tk.DISABLED)
-            self.btn_opi_init.config(state=tk.DISABLED)
+            self.btn_opi_upload.config(state=tk.DISABLED, bg="#cbd5e1", fg="#94a3b8")
+            self.btn_opi_play.config(state=tk.DISABLED, bg="#cbd5e1", fg="#94a3b8")
+            self.btn_opi_init.config(state=tk.DISABLED, bg="#cbd5e1", fg="#94a3b8")
             self.btn_opi_log.config(state=tk.NORMAL)
 
     def toggle_record(self):
@@ -1137,6 +1159,10 @@ class MacroApp:
             messagebox.showerror("Error", "Paramiko library is not installed. Orange Pi features are unavailable.")
             return
 
+        if self.ssh_client is None:
+            messagebox.showwarning("Warning", "請先點擊 'Init USB Gadget' 按鈕進行初始化與連線設定。")
+            return
+
         # Get selected folder and file
         sel_folder = self.list_folders.curselection()
         sel_file = self.list_files.curselection()
@@ -1165,16 +1191,6 @@ class MacroApp:
             user = "orangepi"
             host = login
 
-        # Save config
-        save_opi_config(login)
-
-        # Get password
-        if not self.opi_password:
-            password = simpledialog.askstring("Password Required", f"Enter SSH password for {user}@{host}:", show='*')
-            if not password:
-                return
-            self.opi_password = password
-            
         json_path = os.path.join(RECORDED_DIR, folder_name, file_name)
         name_without_ext = os.path.splitext(file_name)[0]
         local_hid_path = os.path.join(RECORDED_DIR, folder_name, name_without_ext + ".hid")
@@ -1203,33 +1219,24 @@ class MacroApp:
                 if not success:
                     raise Exception("Failed to compile macro to HID binary using translator.")
                 self.log_message("[Local] Compilation successful.")
-                    
-                self.root.after(0, lambda: self.lbl_status.config(text="Status: Connecting to Orange Pi...", fg="#ea580c"))
-                self.log_message(f"[SSH] Connecting to {user}@{host} via SSH...")
+                
+                # Check connection status
+                if self.ssh_client is None or not self.ssh_client.get_transport() or not self.ssh_client.get_transport().is_active():
+                    raise Exception("SSH 連線已中斷，請重新進行初始化設定。")
 
-                # 2. SSH/SFTP connection
-                ssh = paramiko.SSHClient()
-                ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-                ssh.connect(host, username=user, password=self.opi_password, timeout=10)
-                self.log_message("[SSH] SSH Connection established successfully.")
+                home_dir = self.opi_home_dir if self.opi_home_dir else f"/home/{user}"
                 
                 self.root.after(0, lambda: self.lbl_status.config(text="Status: Creating remote folders...", fg="#ea580c"))
                 
-                # Get home directory
-                stdin, stdout, stderr = ssh.exec_command("echo $HOME")
-                home_dir = stdout.read().decode().strip()
-                if not home_dir:
-                    home_dir = f"/home/{user}"
-                self.log_message(f"[SSH] Detected home directory: {home_dir}")
-                    
                 # Create remote directory
                 remote_dir = f"{home_dir}/pi_mouse/recorded"
                 self.log_message(f"[SSH] Ensuring remote directory exists: {remote_dir}")
-                ssh.exec_command(f'mkdir -p "{remote_dir}"')
+                stdin, stdout, stderr = self.ssh_client.exec_command(f'mkdir -p "{remote_dir}"')
+                stdout.channel.recv_exit_status() # Wait for folder creation to complete
                 
                 # Initialize SFTP
                 self.log_message("[SFTP] Opening SFTP channel...")
-                sftp = ssh.open_sftp()
+                sftp = self.ssh_client.open_sftp()
                 
                 self.root.after(0, lambda: self.lbl_status.config(text="Status: Uploading file...", fg="#ea580c"))
                 
@@ -1239,35 +1246,30 @@ class MacroApp:
                 self.log_message("[SFTP] File uploaded successfully.")
                 
                 sftp.close()
-                ssh.close()
-                self.log_message("[SSH] SSH connection closed.")
                 
                 self.root.after(0, lambda: self.set_gui_state("idle"))
                 self.root.after(0, lambda: self.lbl_status.config(text="Status: Compile & Upload successful", fg="#16a34a"))
                 self.root.after(0, lambda: messagebox.showinfo("Success", f"Macro successfully compiled and uploaded to {user}@{host}:{remote_file_path}"))
                 
-            except paramiko.AuthenticationException:
-                self.opi_password = "" # Clear cached wrong password
-                self.log_message("\n[ERROR] SSH authentication failed. Please verify credentials.")
-                self.root.after(0, lambda: self.set_gui_state("idle"))
-                self.root.after(0, lambda: self.lbl_status.config(text="Status: SSH Authentication Failed", fg="#dc2626"))
-                self.root.after(0, lambda: messagebox.showerror("Authentication Error", "SSH login failed. Please verify your password and username."))
             except Exception as e:
-                self.opi_password = "" # Might be connection issue or wrong password
                 self.log_message(f"\n[ERROR] Operation failed: {str(e)}")
-                self.root.after(0, lambda: self.set_gui_state("idle"))
+                self.root.after(0, self.disconnect_opi)
                 self.root.after(0, lambda: self.lbl_status.config(text="Status: Connection Failed", fg="#dc2626"))
                 self.root.after(0, lambda: messagebox.showerror("Error", f"Failed to upload to Orange Pi:\n{str(e)}"))
 
         import threading
         threading.Thread(target=upload_worker, daemon=True).start()
 
-    def play_on_opi(self):
+    def play_by_opi(self):
         """
-        Connects to Orange Pi via SSH and plays the uploaded macro using 'sudo /usr/bin/python3 /home/<user>/pi_mouse/play.py ...'.
+        Connects to Orange Pi via SSH and plays the uploaded macro using '/usr/bin/python3 /home/<user>/pi_mouse/client_km.py ...'.
         """
         if not HAS_PARAMIKO:
             messagebox.showerror("Error", "Paramiko library is not installed. Orange Pi features are unavailable.")
+            return
+
+        if self.ssh_client is None:
+            messagebox.showwarning("Warning", "請先點擊 'Init USB Gadget' 按鈕進行初始化與連線設定。")
             return
 
         # Get selected folder and file to know the macro name
@@ -1290,25 +1292,11 @@ class MacroApp:
             self.log_text.config(state=tk.DISABLED)
 
         login = self.opi_login.get().strip()
-        if not login:
-            messagebox.showwarning("Warning", "Please enter your Orange Pi user@host login details.")
-            return
-
         if '@' in login:
             user, host = login.split('@', 1)
         else:
             user = "orangepi"
             host = login
-
-        # Save config
-        save_opi_config(login)
-
-        # Get password
-        if not self.opi_password:
-            password = simpledialog.askstring("Password Required", f"Enter SSH password for {user}@{host}:", show='*')
-            if not password:
-                return
-            self.opi_password = password
 
         # Set UI state to running
         self.set_gui_state("opi_running")
@@ -1319,32 +1307,38 @@ class MacroApp:
 
         def play_worker():
             try:
-                self.log_message(f"[SSH] Connecting to {user}@{host}...")
-                # Connect
-                ssh = paramiko.SSHClient()
-                ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-                ssh.connect(host, username=user, password=self.opi_password, timeout=10)
-                self.log_message("[SSH] SSH Connection established.")
+                # Check connection status
+                if self.ssh_client is None or not self.ssh_client.get_transport() or not self.ssh_client.get_transport().is_active():
+                    raise Exception("SSH 連線已中斷，請重新進行初始化設定。")
                 
                 self.root.after(0, lambda: self.lbl_status.config(text="Status: Playing macro on Orange Pi...", fg="#d97706"))
 
-                # Get home directory
-                stdin, stdout, stderr = ssh.exec_command("echo $HOME")
-                home_dir = stdout.read().decode().strip()
-                if not home_dir:
-                    home_dir = f"/home/{user}"
-                self.log_message(f"[SSH] Detected home directory: {home_dir}")
+                home_dir = self.opi_home_dir if self.opi_home_dir else f"/home/{user}"
 
-                # Execute command with sudo -S to feed the password
-                cmd = f'sudo -S /usr/bin/python3 "{home_dir}/pi_mouse/play.py" "{home_dir}/pi_mouse/recorded/{remote_file_name}"'
+                # Check if USB gadget is initialized and writable
+                check_cmd = '[ -c /dev/hidg0 ] && [ -c /dev/hidg1 ] && [ -w /dev/hidg0 ] && [ -w /dev/hidg1 ]'
+                self.log_message(f"[SSH] Checking USB Gadget status: {check_cmd}")
+                check_stdin, check_stdout, check_stderr = self.ssh_client.exec_command(check_cmd)
+                check_exit_status = check_stdout.channel.recv_exit_status()
+                
+                if check_exit_status != 0:
+                    self.log_message("[ERROR] USB Gadget is not initialized or write permission is missing.")
+                    self.root.after(0, lambda: self.set_gui_state("idle"))
+                    self.root.after(0, lambda: self.lbl_status.config(text="Status: Gadget Not Initialized", fg="#dc2626"))
+                    self.root.after(0, lambda: messagebox.showwarning(
+                        "Warning",
+                        "偵測到 Orange Pi 尚未啟用 USB Gadget 設定，請先點擊 'Init USB Gadget' 按鈕進行初始化設定。"
+                    ))
+                    return
+
+                # Execute command without sudo (since /dev/hidgX are writable due to chmod 666)
+                cmd = f'/usr/bin/python3 "{home_dir}/pi_mouse/client_km.py" "{home_dir}/pi_mouse/recorded/{remote_file_name}"'
                 self.log_message(f"[SSH] Executing: {cmd}")
                 
-                # We use get_pty=True so that sudo -S can receive input on the pseudo-terminal
-                stdin, stdout, stderr = ssh.exec_command(cmd, get_pty=True)
+                # We use get_pty=True so that we get output dynamically
+                stdin, stdout, stderr = self.ssh_client.exec_command(cmd, get_pty=True)
                 
                 self.log_message("[SSH] --- Command Output Stream Start ---")
-                
-                password_sent = False
                 
                 # Read output
                 while True:
@@ -1354,14 +1348,6 @@ class MacroApp:
                             break
                         chunk = data.decode('utf-8', errors='ignore')
                         self.root.after(0, lambda c=chunk: self._append_raw_log(c))
-                        
-                        # Check if sudo is asking for password
-                        chunk_lower = chunk.lower()
-                        if not password_sent and ("password" in chunk_lower or "密碼" in chunk_lower or "password:" in chunk_lower):
-                            self.log_message("\n[SSH] Password prompt detected, sending sudo password...")
-                            stdin.write(self.opi_password + "\n")
-                            stdin.flush()
-                            password_sent = True
                     elif stdout.channel.exit_status_ready():
                         break
                     time.sleep(0.05)
@@ -1373,12 +1359,8 @@ class MacroApp:
                         chunk = data.decode('utf-8', errors='ignore')
                         self.root.after(0, lambda c=chunk: self._append_raw_log(c))
                         
-                # Close connection
                 exit_status = stdout.channel.recv_exit_status()
                 self.log_message(f"\n[SSH] Command completed with exit code: {exit_status}")
-                
-                ssh.close()
-                self.log_message("[SSH] Connection closed.")
                 
                 self.root.after(0, lambda: self.set_gui_state("idle"))
                 self.root.after(0, lambda: self.lbl_status.config(text="Status: Remote Playback Finished", fg="#16a34a"))
@@ -1397,27 +1379,44 @@ class MacroApp:
                 else:
                     self.root.after(0, lambda: messagebox.showerror("Playback Error", f"Playback failed on Orange Pi with exit code {exit_status}.\nCheck SSH Debug Log window for errors."))
                 
-            except paramiko.AuthenticationException:
-                self.opi_password = "" # Clear cached wrong password
-                self.log_message("\n[ERROR] SSH authentication failed. Please verify credentials.")
-                self.root.after(0, lambda: self.set_gui_state("idle"))
-                self.root.after(0, lambda: self.lbl_status.config(text="Status: SSH Authentication Failed", fg="#dc2626"))
-                self.root.after(0, lambda: messagebox.showerror("Authentication Error", "SSH login failed. Please verify your password and username."))
             except Exception as e:
                 self.log_message(f"\n[ERROR] Operation failed: {str(e)}")
-                self.root.after(0, lambda: self.set_gui_state("idle"))
+                self.root.after(0, self.disconnect_opi)
                 self.root.after(0, lambda: self.lbl_status.config(text="Status: Playback Failed", fg="#dc2626"))
                 self.root.after(0, lambda: messagebox.showerror("Error", f"Failed to execute playback on Orange Pi:\n{str(e)}"))
 
         import threading
         threading.Thread(target=play_worker, daemon=True).start()
 
+    def disconnect_opi(self):
+        """
+        Safely disconnects the cached SSH connection and resets UI button states.
+        """
+        if self.ssh_client is not None:
+            self.log_message("\n[SSH] Disconnecting from Orange Pi...")
+            try:
+                self.ssh_client.close()
+            except Exception:
+                pass
+            self.ssh_client = None
+            self.opi_home_dir = None
+            self.log_message("[SSH] Disconnected.")
+            
+        self.set_gui_state("idle")
+        self.lbl_status.config(text="Status: Ready", fg="#1e40af")
+
     def init_opi_gadget(self):
         """
         Connects to Orange Pi via SSH and runs setup_as_km.sh to initialize USB HID Keyboard/Mouse gadget.
+        Toggles disconnect if already connected.
         """
         if not HAS_PARAMIKO:
             messagebox.showerror("Error", "Paramiko library is not installed. Orange Pi features are unavailable.")
+            return
+
+        # If already connected, act as disconnect
+        if self.ssh_client is not None:
+            self.disconnect_opi()
             return
 
         # Clear previous logs
@@ -1463,6 +1462,9 @@ class MacroApp:
                 ssh.connect(host, username=user, password=self.opi_password, timeout=10)
                 self.log_message("[SSH] SSH Connection established.")
                 
+                # Cache connection
+                self.ssh_client = ssh
+                
                 self.root.after(0, lambda: self.lbl_status.config(text="Status: Initializing USB gadget...", fg="#0d9488"))
 
                 # Get home directory
@@ -1470,10 +1472,59 @@ class MacroApp:
                 home_dir = stdout.read().decode().strip()
                 if not home_dir:
                     home_dir = f"/home/{user}"
+                self.opi_home_dir = home_dir
                 self.log_message(f"[SSH] Detected home directory: {home_dir}")
 
+                # Ensure remote directory exists
+                ssh.exec_command(f'mkdir -p "{home_dir}/pi_mouse"')
+
+                # SFTP upload check
+                self.log_message("[SFTP] Opening SFTP channel...")
+                sftp = ssh.open_sftp()
+                
+                # Check and upload setup_as_km.sh
+                remote_sh_path = f"{home_dir}/pi_mouse/setup_as_km.sh"
+                local_sh_path = os.path.join(BASE_DIR, "setup_as_km.sh")
+                sh_exists = False
+                try:
+                    sftp.stat(remote_sh_path)
+                    sh_exists = True
+                    self.log_message("[SFTP] setup_as_km.sh already exists, skipping upload.")
+                except IOError:
+                    pass
+                    
+                if not sh_exists:
+                    self.log_message(f"[SFTP] Uploading {local_sh_path} -> {remote_sh_path}...")
+                    self.root.after(0, lambda: self.lbl_status.config(text="Status: Uploading setup script...", fg="#ea580c"))
+                    sftp.put(local_sh_path, remote_sh_path)
+                    self.log_message("[SFTP] setup_as_km.sh uploaded.")
+                
+                # Check and upload client_km.py
+                remote_client_path = f"{home_dir}/pi_mouse/client_km.py"
+                local_client_path = os.path.join(BASE_DIR, "orangepi_client.py")
+                client_exists = False
+                try:
+                    sftp.stat(remote_client_path)
+                    client_exists = True
+                    self.log_message("[SFTP] client_km.py already exists, skipping upload.")
+                except IOError:
+                    pass
+                    
+                if not client_exists:
+                    self.log_message(f"[SFTP] Uploading {local_client_path} -> {remote_client_path}...")
+                    self.root.after(0, lambda: self.lbl_status.config(text="Status: Uploading client script...", fg="#ea580c"))
+                    sftp.put(local_client_path, remote_client_path)
+                    self.log_message("[SFTP] client_km.py uploaded.")
+
+                sftp.close()
+
+                # Make setup_as_km.sh executable
+                ssh.exec_command(f'chmod +x "{remote_sh_path}"')
+
+                self.root.after(0, lambda: self.lbl_status.config(text="Status: Initializing USB gadget...", fg="#0d9488"))
+
                 # Execute setup_as_km.sh command with sudo -S to feed the password
-                cmd = f'sudo -S "{home_dir}/pi_mouse/setup_as_km.sh"'
+                cmd = f'sudo -S "{remote_sh_path}"'
                 self.log_message(f"[SSH] Executing: {cmd}")
                 
                 stdin, stdout, stderr = ssh.exec_command(cmd, get_pty=True)
@@ -1509,31 +1560,28 @@ class MacroApp:
                         chunk = data.decode('utf-8', errors='ignore')
                         self.root.after(0, lambda c=chunk: self._append_raw_log(c))
                         
-                # Close connection
+                # Close connection IF it failed. Otherwise keep open.
                 exit_status = stdout.channel.recv_exit_status()
                 self.log_message(f"\n[SSH] Command completed with exit code: {exit_status}")
                 
-                ssh.close()
-                self.log_message("[SSH] Connection closed.")
-                
-                self.root.after(0, lambda: self.set_gui_state("idle"))
-                
                 if exit_status == 0:
+                    self.root.after(0, lambda: self.set_gui_state("idle"))
                     self.root.after(0, lambda: self.lbl_status.config(text="Status: USB Gadget Initialized", fg="#16a34a"))
                     self.root.after(0, lambda: messagebox.showinfo("Success", f"USB Gadget initialized successfully on Orange Pi!"))
                 else:
+                    self.root.after(0, self.disconnect_opi)
                     self.root.after(0, lambda: self.lbl_status.config(text="Status: Gadget Init Failed", fg="#dc2626"))
                     self.root.after(0, lambda: messagebox.showerror("Init Error", f"USB Gadget initialization failed on Orange Pi with exit code {exit_status}.\nCheck SSH Debug Log window for errors."))
                 
             except paramiko.AuthenticationException:
                 self.opi_password = "" # Clear cached wrong password
                 self.log_message("\n[ERROR] SSH authentication failed. Please verify credentials.")
-                self.root.after(0, lambda: self.set_gui_state("idle"))
+                self.root.after(0, self.disconnect_opi)
                 self.root.after(0, lambda: self.lbl_status.config(text="Status: SSH Authentication Failed", fg="#dc2626"))
                 self.root.after(0, lambda: messagebox.showerror("Authentication Error", "SSH login failed. Please verify your password and username."))
             except Exception as e:
                 self.log_message(f"\n[ERROR] Operation failed: {str(e)}")
-                self.root.after(0, lambda: self.set_gui_state("idle"))
+                self.root.after(0, self.disconnect_opi)
                 self.root.after(0, lambda: self.lbl_status.config(text="Status: Gadget Init Failed", fg="#dc2626"))
                 self.root.after(0, lambda: messagebox.showerror("Error", f"Failed to initialize USB Gadget on Orange Pi:\n{str(e)}"))
 
@@ -1544,6 +1592,9 @@ class MacroApp:
         """
         Triggered when closing window. Clean hooks up.
         """
+        # Close active SSH client
+        self.disconnect_opi()
+        
         if not self.is_saved and self.events:
             ans = messagebox.askyesnocancel("Warning", "You have unsaved recording events. Do you want to save before closing?")
             if ans is True:
