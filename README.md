@@ -11,44 +11,37 @@ This project supports two main execution modes:
 
 ---
 
-## Requirements
+## Use it
 
-The application requires Python 3.x and the following external modules:
-- **`pynput`**: For recording mouse/keyboard events and local playback.
-- **`paramiko`**: For SSH/SFTP communication to the Orange Pi.
-
----
-
-## Getting Started
-
-### Installation
-
-Clone the repository to your local machine:
+### Clone the repository:
 ```bash
 git clone https://github.com/ElenBOT/gui_action_recorder.git
 cd gui_action_recorder
 ```
 
-Install the required dependencies:
+### Create venv and install the required dependencies:
+
+Windows
+>```powershell
+>python -m venv pimouse
+>pimouse\Scripts\activate
+>pip install pynput paramiko
+># rmdir /s /q pimouse # to remove venv
+>```
+
+Linux
+>```bash
+>python3 -m venv pimouse
+>source pimouse/bin/activate
+>pip install pynput paramiko
+># rm -rf pimouse # to remove venv
+>```
+
+### Launch the Application:
 ```bash
-pip install pynput paramiko
+python action_recorder.py
 ```
+then others are easy to see on the GUI panels.
 
-### Usage
-
-1. **Launch the Application**:
-   ```bash
-   python action_recorder.py
-   ```
-
-2. **Record & Replay Locally**:
-   - Press `[F8]` (or click **Record**) to start recording. The window will go semi-transparent.
-   - Perform your actions, and press `[F8]` (or click **Stop**) when finished.
-   - Enter a filename, select a target folder in the explorer, and click `💾` to save.
-   - Select a macro and click **Play** (or press `[F8]`) to replay it.
-
-3. **Orange Pi Hardware Emulation**:
-   - Enter your Orange Pi login details (`user@host`) and password in the OPi Panel.
-   - Click **Init USB Gadget** to run your remote USB gadget initialization script (`setup_as_km.sh`).
-   - Click **Compile & Send** to compile your macro into absolute coordinate binary format and upload it.
-   - Click **Play on OPi** to trigger physical playback.
+## How
+This project leverages USB OTG (On-The-Go) and the Linux USB Gadget (`libcomposite`) framework to turn the Orange Pi One into an emulated keyboard and mouse. If you wish to adapt this project for other SBCs or MCUs, please refer to their respective hardware datasheets to ensure USB OTG or USB Device mode support.
